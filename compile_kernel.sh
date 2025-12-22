@@ -17,6 +17,8 @@ BOOT_DIR=~/linux_training/BOOT_FILES
 
 echo "🛠️ Kernel source path: $KERNEL_SRC_DIR"
 
+mkdir -p "${BOOT_DIR}"
+
 # Check if kernel directory exists
 if [ ! -d "$KERNEL_SRC_DIR" ]; then
     echo "❌ Error: Kernel source directory not found at $KERNEL_SRC_DIR"

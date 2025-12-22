@@ -74,7 +74,7 @@ echo "📦 Installing build tools and kernel dependencies..."
 
 MISSING_PKGS=()
 
-for pkg in gparted minicom make parted bison flex fzf bc swig libssl-dev libncurses-dev build-essential git wget curl device-tree-compiler u-boot-tools; do
+for pkg in gparted minicom make parted bison flex fzf bc swig libssl-dev lzop libncurses-dev build-essential git wget curl device-tree-compiler u-boot-tools; do
     if ! dpkg -s "$pkg" &> /dev/null; then
         MISSING_PKGS+=("$pkg")
     else
