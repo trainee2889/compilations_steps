@@ -142,11 +142,11 @@ fi
 # -----------------------------
 read -p "copy the boot image to sd card? (y/n): " choice
 if [[ "$choice" =~ ^[Yy]$ ]]; then
-    
+
     boot_sd_path="/media/$(whoami)/BOOT"
 
     if [ -d "$boot_sd_path" ]; then
-        
+
         if [ ! -f "$boot_sd_path/MLO" ]; then
             echo "WARNING: MLO not found in $boot_sd_path"
         else
