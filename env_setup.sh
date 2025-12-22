@@ -44,8 +44,17 @@ fi
 if command -v arm-linux-gnueabihf-gcc &> /dev/null; then
     version=$(arm-linux-gnueabihf-gcc -dumpversion)
 else
-    echo "❌ arm-linux-gnueabihf-gcc not found after installation!"
-    exit 1
+    echo "❌ arm-linux-gnueabihf-gcc not found in PATH."
+
+    # attempt to detect versioned binary
+    if command -v arm-linux-gnueabihf-gcc-11 &>/dev/null; then
+        echo "ℹ️ Found arm-linux-gnueabihf-gcc-11 - creating alias"
+        sudo ln -s /usr/bin/arm-linux-gnueabihf-gcc-11 /usr/bin/arm-linux-gnueabihf-gcc
+        version=$(arm-linux-gnueabihf-gcc -dumpversion)
+    else
+        echo "❌ ARM GCC toolchain installation failed"
+        exit 1
+    fi
 fi
 
 echo "🔧 Detected GCC version: $version"
