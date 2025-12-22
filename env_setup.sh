@@ -23,25 +23,40 @@ if [[ "$proceed" != "y" && "$proceed" != "Y" ]]; then
 fi
 
 # -----------------------------
-# TOOLCHAIN CHECK
+# TOOLCHAIN CHECK (force version 11.x)
 # -----------------------------
 echo "🔍 Checking for ARM cross-compiler..."
 
-if dpkg -l | grep -q "$TOOLCHAIN_PACKAGE"; then
-    echo "✅ Toolchain '$TOOLCHAIN_PACKAGE' already installed."
-    echo "🔧 Version: $(dpkg -s $TOOLCHAIN_PACKAGE | grep Version)"
-    version=$(arm-linux-gnueabihf-gcc -dumpversion)
+# Remove conflicting cross-compiler versions if present
+if dpkg -l | grep -q "gcc-arm-linux-gnueabihf"; then
+    echo "⚠️ Removing previously installed ARM toolchain..."
+    sudo apt remove -y gcc-arm-linux-gnueabihf gcc-*-arm-linux-gnueabihf || true
+fi
 
-    if [[ "$version" != 11* ]]; then
-        echo "❌ Incorrect GCC version detected: $version"
-        echo "➡ Expected major version: 11.x"
-        exit 1
-    fi
-else
+# Install GCC-11 toolchain
+if ! dpkg -l | grep -q "$TOOLCHAIN_PACKAGE"; then
     echo "⬇️ Installing toolchain: $TOOLCHAIN_PACKAGE"
     sudo apt update
     sudo apt install -y "$TOOLCHAIN_PACKAGE"
 fi
+
+# Verify GCC version
+if command -v arm-linux-gnueabihf-gcc &> /dev/null; then
+    version=$(arm-linux-gnueabihf-gcc -dumpversion)
+else
+    echo "❌ arm-linux-gnueabihf-gcc not found after installation!"
+    exit 1
+fi
+
+echo "🔧 Detected GCC version: $version"
+
+if [[ "$version" != 11* ]]; then
+    echo "❌ Incorrect GCC version detected ($version). Expected 11.x"
+    echo "➡️ Manually remove existing toolchain and reinstall."
+    exit 1
+fi
+
+echo "✅ Required GCC version installed: $version"
 
 # -----------------------------
 # OTHER PACKAGE DEPENDENCIES
