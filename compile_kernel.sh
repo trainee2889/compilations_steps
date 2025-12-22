@@ -142,30 +142,38 @@ fi
 # -----------------------------
 read -p "copy the boot image to sd card? (y/n): " choice
 if [[ "$choice" =~ ^[Yy]$ ]]; then
-    boot_sd_path=/media/$(whoami)/BOOT
-    if [ -n "$boot_sd_path" ]; then
+    
+    boot_sd_path="/media/$(whoami)/BOOT"
 
-        # Check for MLO
+    if [ -d "$boot_sd_path" ]; then
+        
         if [ ! -f "$boot_sd_path/MLO" ]; then
             echo "WARNING: MLO not found in $boot_sd_path"
         else
-            sudo cp $KERNEL_SRC_DIR/arch/arm/boot/zImage $(boot_sd_path)
+            sudo cp "$KERNEL_SRC_DIR/arch/arm/boot/zImage" "$boot_sd_path"
+
             read -p "copy wireless .dtb image into sd card? (y/n): " choice
             if [[ "$choice" =~ ^[Yy]$ ]]; then
-                sudo cp $KERNEL_SRC_DIR/arch/arm/boot/am335x-boneblack-wireless.dtb $(boot_sd_path)
+                sudo cp "$KERNEL_SRC_DIR/arch/arm/boot/dts/am335x-boneblack-wireless.dtb" "$boot_sd_path"
             else
-                sudo cp $KERNEL_SRC_DIR/arch/arm/boot/dts/am335x-boneblack.dtb $(boot_sd_path)
+                sudo cp "$KERNEL_SRC_DIR/arch/arm/boot/dts/am335x-boneblack.dtb" "$boot_sd_path"
             fi
         fi
+
     else
-        echo "Copying to $(BOOT_DIR)"
-        sudo cp $KERNEL_SRC_DIR/arch/arm/boot/zImage $KERNEL_SRC_DIR/arch/arm/boot/uImage $(BOOT_DIR)
-        sudo cp $KERNEL_SRC_DIR/arch/arm/boot/am335x-boneblack-wireless.dtb $KERNEL_SRC_DIR/arch/arm/boot/dts/am335x-boneblack.dtb $(BOOT_DIR)
+        echo "BOOT not mounted - copying to $BOOT_DIR"
+        sudo cp "$KERNEL_SRC_DIR/arch/arm/boot/zImage" "$BOOT_DIR"
+        sudo cp "$KERNEL_SRC_DIR/arch/arm/boot/uImage" "$BOOT_DIR"
+        sudo cp "$KERNEL_SRC_DIR/arch/arm/boot/dts/am335x-boneblack-wireless.dtb" "$BOOT_DIR"
+        sudo cp "$KERNEL_SRC_DIR/arch/arm/boot/dts/am335x-boneblack.dtb" "$BOOT_DIR"
     fi
+
 else
-    echo "Copying to $(BOOT_DIR)"
-    sudo cp $KERNEL_SRC_DIR/arch/arm/boot/zImage $KERNEL_SRC_DIR/arch/arm/boot/uImage $(BOOT_DIR)
-    sudo cp $KERNEL_SRC_DIR/arch/arm/boot/am335x-boneblack-wireless.dtb $KERNEL_SRC_DIR/arch/arm/boot/dts/am335x-boneblack.dtb $(BOOT_DIR)
+    echo "Copying to $BOOT_DIR"
+    sudo cp "$KERNEL_SRC_DIR/arch/arm/boot/zImage" "$BOOT_DIR"
+    sudo cp "$KERNEL_SRC_DIR/arch/arm/boot/uImage" "$BOOT_DIR"
+    sudo cp "$KERNEL_SRC_DIR/arch/arm/boot/dts/am335x-boneblack-wireless.dtb" "$BOOT_DIR"
+    sudo cp "$KERNEL_SRC_DIR/arch/arm/boot/dts/am335x-boneblack.dtb" "$BOOT_DIR"
 fi
 
 # -----------------------------
