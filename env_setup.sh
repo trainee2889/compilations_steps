@@ -63,7 +63,7 @@ fi
 # -----------------------------
 if [ ! -d "$KERNEL_DIR" ]; then
     echo "⬇️ Cloning BeagleBone kernel source into $KERNEL_DIR..."
-    git clone --branch v5.10.168-ti-r77 https://github.com/beagleboard/linux.git "$KERNEL_DIR"
+    git clone --depth=1 -b 5.10 https://github.com/beagleboard/linux.git "$KERNEL_DIR"
 else
     echo "⚠️ Kernel directory already exists: $KERNEL_DIR"
 fi
