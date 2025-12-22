@@ -22,7 +22,6 @@ fi
 # -----------------------------
 # Step 1: Clean previous build
 # -----------------------------
-read -t 0.01 -n 10000 discard 2>/dev/null
 read -p "🧹 Remove previous build files? (y/n): " choice
 if [[ "$choice" =~ ^[Yy]$ ]]; then
     make ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE distclean
@@ -50,13 +49,11 @@ fi
 # -----------------------------
 # Step 4: Compile U-Boot
 # -----------------------------
-read -t 0.01 -n 10000 discard 2>/dev/null
 read -p "🔧 Compile U-Boot now? (y/n): " choice
 if [[ "$choice" =~ ^[Yy]$ ]]; then
     make ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE -j$(nproc)
 fi
 
-read -t 0.01 -n 10000 discard 2>/dev/null
 read -p "copy the MLO and u-boot image to sd card? (y/n): " choice
 if [[ "$choice" =~ ^[Yy]$ ]]; then
     boot_sd_path=/media/$(whoami)/BOOT
@@ -66,7 +63,7 @@ if [[ "$choice" =~ ^[Yy]$ ]]; then
         if [ ! -f "$boot_sd_path/MLO" ]; then
             echo "WARNING: MLO not found in $boot_sd_path"
         fi
-        sudo cp MLO u-boot.img $(boot_sd_path)
+        sudo cp MLO u-boot.img "$boot_sd_path"
     else
         echo "Copying to $(OUTPUT_DIR)"
         mkdir -p "$OUTPUT_DIR"

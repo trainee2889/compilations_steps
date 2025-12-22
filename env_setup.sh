@@ -8,7 +8,7 @@ set -e
 BASE_DIR=~/linux_training/bbb-project
 KERNEL_DIR="$BASE_DIR/08_kernel/kernel"
 ENV_FILE="$BASE_DIR/env.sh"
-TOOLCHAIN_PACKAGE="gcc-arm-linux-gnueabihf"
+TOOLCHAIN_PACKAGE="gcc-11-arm-linux-gnueabihf"
 
 echo "📁 Using workspace directory: $BASE_DIR"
 mkdir -p "$BASE_DIR"
@@ -30,6 +30,13 @@ echo "🔍 Checking for ARM cross-compiler..."
 if dpkg -l | grep -q "$TOOLCHAIN_PACKAGE"; then
     echo "✅ Toolchain '$TOOLCHAIN_PACKAGE' already installed."
     echo "🔧 Version: $(dpkg -s $TOOLCHAIN_PACKAGE | grep Version)"
+    version=$(arm-linux-gnueabihf-gcc -dumpversion)
+
+    if [[ "$version" != 11* ]]; then
+        echo "❌ Incorrect GCC version detected: $version"
+        echo "➡ Expected major version: 11.x"
+        exit 1
+    fi
 else
     echo "⬇️ Installing toolchain: $TOOLCHAIN_PACKAGE"
     sudo apt update
@@ -43,7 +50,7 @@ echo "📦 Installing build tools and kernel dependencies..."
 
 MISSING_PKGS=()
 
-for pkg in gparted minicom make parted fzf build-essential git wget curl device-tree-compiler u-boot-tools; do
+for pkg in gparted minicom make parted bison flex fzf bc swig libssl-dev libncurses-dev build-essential git wget curl device-tree-compiler u-boot-tools; do
     if ! dpkg -s "$pkg" &> /dev/null; then
         MISSING_PKGS+=("$pkg")
     else

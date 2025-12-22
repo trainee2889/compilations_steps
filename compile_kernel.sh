@@ -29,7 +29,6 @@ cd "$KERNEL_SRC_DIR" || exit 1
 # -----------------------------
 # Step 1: Clean previous build
 # -----------------------------
-read -t 0.01 -n 10000 discard 2>/dev/null
 read -p "🧹 Remove previous build files? (y/n): " choice
 if [[ "$choice" =~ ^[Yy]$ ]]; then
     make ARCH=$ARCH distclean
@@ -38,7 +37,6 @@ fi
 # -----------------------------
 # Step 2: Configure kernel
 # -----------------------------
-read -t 0.01 -n 10000 discard 2>/dev/null
 read -p "⚙️ Load default defconfig ($DEFCONFIG)? (y/n): " choice
 if [[ "$choice" =~ ^[Yy]$ ]]; then
     make ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE "$DEFCONFIG"
@@ -74,7 +72,6 @@ fi
 # -----------------------------
 # Step 3.2: Build only DTBs
 # -----------------------------
-read -t 0.01 -n 10000 discard 2>/dev/null
 read -p "🌳 Build only DTBs? (y/n): " choice
 if [[ "$choice" =~ ^[Yy]$ ]]; then
     make ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE dtbs -j$(nproc)
@@ -83,7 +80,6 @@ fi
 # -----------------------------
 # Step 4: Build kernel image and DTBs
 # -----------------------------
-read -t 0.01 -n 10000 discard 2>/dev/null
 read -p "🔧 Compile kernel uImage + dtbs? (y/n): " choice
 if [[ "$choice" =~ ^[Yy]$ ]]; then
     make ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE uImage dtbs LOADADDR=$LOADADDR -j$(nproc)
@@ -92,7 +88,6 @@ fi
 # -----------------------------
 # Step 5: Build kernel modules
 # -----------------------------
-read -t 0.01 -n 10000 discard 2>/dev/null
 read -p "📦 Build kernel modules? (y/n): " choice
 if [[ "$choice" =~ ^[Yy]$ ]]; then
     make ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE modules -j$(nproc)
@@ -101,7 +96,6 @@ fi
 # -----------------------------
 # Step 6: Install modules to rootfs
 # -----------------------------
-read -t 0.01 -n 10000 discard 2>/dev/null
 read -p "📦 Install modules to rootfs? (y/n): " choice
 if [[ "$choice" =~ ^[Yy]$ ]]; then
     read -p "📁 Enter rootfs path (or leave blank to use default): " input_rootfs
@@ -122,7 +116,6 @@ fi
 # -----------------------------
 # Step 7: Install kernel to /boot
 # -----------------------------
-read -t 0.01 -n 10000 discard 2>/dev/null
 read -p "📦 Install kernel to rootfs /boot? (y/n): " choice
 if [[ "$choice" =~ ^[Yy]$ ]]; then
     read -p "📁 Enter rootfs path (or leave blank to use previous path): " input_rootfs_k
@@ -145,7 +138,6 @@ fi
 # -----------------------------
 # Step 8: copy boot files
 # -----------------------------
-read -t 0.01 -n 10000 discard 2>/dev/null
 read -p "copy the boot image to sd card? (y/n): " choice
 if [[ "$choice" =~ ^[Yy]$ ]]; then
     boot_sd_path=/media/$(whoami)/BOOT
