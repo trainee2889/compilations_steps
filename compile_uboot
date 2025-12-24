@@ -1,0 +1,222 @@
+#!/bin/bash
+
+################################################################################
+# CONFIGURATION
+################################################################################
+
+UBOOT_BASE_DIR="$HOME/linux_training/bbb-project/09_uBoot"
+CROSS_COMPILE="arm-linux-gnueabihf-"
+ARCH="arm"
+OUTPUT_DIR="$HOME/linux_training/BOOT_FILES"
+
+################################################################################
+# HELPER: YES / NO / HELP (UNCHANGED)
+################################################################################
+
+whiptail_yes_no_help() {
+    local TITLE="$1"
+    local QUESTION="$2"
+    local HELP_TEXT="$3"
+
+    while true; do
+        CHOICE=$(whiptail --title "$TITLE" --menu \
+"$QUESTION" 15 80 3 \
+"Yes"  "Proceed with this step" \
+"No"   "Skip this step" \
+"Help" "Explain what this step does" \
+3>&1 1>&2 2>&3)
+
+        STATUS=$?
+
+        # Cancel / ESC → return to menu
+        [ $STATUS -ne 0 ] && return 2
+
+        case "$CHOICE" in
+            Yes)  return 0 ;;
+            No)   return 1 ;;
+            Help) whiptail --title "Help" --msgbox "$HELP_TEXT" 20 80 ;;
+        esac
+    done
+}
+
+################################################################################
+# PRE-CHECK
+################################################################################
+
+if [ ! -d "$UBOOT_BASE_DIR" ]; then
+    whiptail --msgbox \
+"[✗] U-Boot directory not found.
+
+Expected:
+$UBOOT_BASE_DIR
+" 10 70
+    exit 1
+fi
+
+cd "$UBOOT_BASE_DIR" || exit 1
+
+if [ ! -f Makefile ]; then
+    whiptail --msgbox \
+"[✗] Makefile not found.
+
+This directory must contain U-Boot source.
+" 10 70
+    exit 1
+fi
+
+################################################################################
+# INTERNAL CHECKS
+################################################################################
+
+check_config_present() {
+    if [ ! -f .config ]; then
+        whiptail --msgbox \
+"⚠️ U-Boot configuration not found.
+
+The build requires a valid .config file.
+
+Please run:
+→ 2 Apply defconfig
+
+before building U-Boot.
+" 12 70
+        return 1
+    fi
+    return 0
+}
+
+################################################################################
+# STEP FUNCTIONS
+################################################################################
+
+step_clean() {
+    HELP="
+YES:
+- Runs make distclean
+- Removes all previous build artifacts
+
+NO:
+- Keeps existing build files
+"
+    whiptail_yes_no_help "Clean U-Boot Build" \
+        "Remove previous U-Boot build files?" "$HELP"
+    [ $? -eq 0 ] && make ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE distclean
+}
+
+step_defconfig() {
+    CONFIG=$(whiptail --inputbox \
+"Enter U-Boot defconfig name
+
+Recommended:
+am335x_evm_defconfig
+" 12 70 3>&1 1>&2 2>&3)
+
+    [ -z "$CONFIG" ] && return
+
+    make ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE "$CONFIG"
+}
+
+step_menuconfig() {
+    HELP="
+YES:
+- Open menuconfig UI
+- Customize U-Boot options
+
+NO:
+- Keep current configuration
+"
+    whiptail_yes_no_help "U-Boot Configuration" \
+        "Run menuconfig?" "$HELP"
+    [ $? -eq 0 ] && make ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE menuconfig
+}
+
+step_build() {
+    #Dependency check
+    check_config_present || return
+
+    HELP="
+YES:
+- Build U-Boot (MLO + u-boot.img)
+
+NO:
+- Skip compilation
+"
+    whiptail_yes_no_help "Build U-Boot" \
+        "Compile U-Boot now?" "$HELP"
+    [ $? -eq 0 ] && make ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE -j$(nproc)
+}
+
+step_copy() {
+    HELP="
+YES:
+- Copy files to SD card BOOT partition
+
+NO:
+- Copy files to:
+$OUTPUT_DIR
+"
+    whiptail_yes_no_help "Copy Boot Files" \
+        "Copy MLO and u-boot.img to SD card?" "$HELP"
+    RET=$?
+
+    mkdir -p "$OUTPUT_DIR"
+
+    if [ $RET -eq 0 ]; then
+        BOOT_SD="/media/$(whoami)/BOOT"
+
+        if [ -d "$BOOT_SD" ]; then
+            sudo cp -v MLO u-boot.img "$BOOT_SD"
+            whiptail --msgbox \
+"[✔] Files copied to SD card BOOT partition:
+$BOOT_SD" 10 70
+        else
+            cp -v MLO u-boot.img "$OUTPUT_DIR"
+            whiptail --msgbox \
+"⚠️ BOOT partition not mounted.
+Files copied to:
+$OUTPUT_DIR" 10 70
+        fi
+    elif [ $RET -eq 1 ]; then
+        cp -v MLO u-boot.img "$OUTPUT_DIR"
+        whiptail --msgbox \
+"Files copied to:
+$OUTPUT_DIR" 10 70
+    fi
+}
+
+run_all() {
+    step_clean
+    step_defconfig
+    step_menuconfig
+    step_build
+    step_copy
+}
+
+################################################################################
+# MAIN MENU
+################################################################################
+
+while true; do
+    CHOICE=$(whiptail --title "U-Boot Build Menu" --menu \
+"Select an action:" 20 75 7 \
+"1" "Clean U-Boot build" \
+"2" "Apply defconfig" \
+"3" "Run menuconfig" \
+"4" "Build U-Boot" \
+"5" "Copy boot files" \
+"6" "Run ALL steps" \
+"7" "Exit" \
+3>&1 1>&2 2>&3)
+
+    [ $? -ne 0 ] && continue
+
+    case "$CHOICE" in
+        1) step_clean ;;
+        2) step_defconfig ;;
+        3) step_menuconfig ;;
+        4) step_build ;;
+        5) step_copy ;;
+        6) run_all ;;
+        7) clear; exit 0 ;;
+    esac
+done

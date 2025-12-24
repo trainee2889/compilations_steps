@@ -1,0 +1,213 @@
+#!/bin/bash
+
+################################################################################
+# CONFIGURATION
+################################################################################
+
+BASE_DIR="$HOME/linux_training/bbb-project"
+KERNEL_DIR="$BASE_DIR/08_kernel/kernel"
+ENV_FILE="$BASE_DIR/env.sh"
+
+mkdir -p "$BASE_DIR"
+
+################################################################################
+# HELPER: YES / NO / HELP (DO NOT CHANGE)
+################################################################################
+
+whiptail_yes_no_help() {
+    local QUESTION="$1"
+    local HELP_MSG="$2"
+
+    while true; do
+        CHOICE=$(whiptail --title "BeagleBone Environment Setup" \
+            --menu "$QUESTION" 15 80 3 \
+            "Yes"  "Proceed" \
+            "No"   "Go back / Skip" \
+            "Help" "View details" \
+            3>&1 1>&2 2>&3)
+
+        STATUS=$?
+
+        [ $STATUS -ne 0 ] && return 1
+
+        case "$CHOICE" in
+            Yes)  return 0 ;;
+            No)   return 1 ;;
+            Help) whiptail --title "Help" --msgbox "$HELP_MSG" 20 90 ;;
+        esac
+    done
+}
+
+################################################################################
+# INTERNAL STATE (FIXED)
+################################################################################
+
+PKG_OK=false
+PKG_DECIDED=false
+TOOLCHAIN_OK=false
+
+################################################################################
+# STEP 1: PACKAGE INSTALL CONFIRMATION (FIXED)
+################################################################################
+
+step_confirm_packages() {
+    # Do not re-ask if already decided
+    $PKG_DECIDED && return
+
+    HELP="
+YES:
+- Allows package installation using sudo
+
+NO:
+- Skip environment setup
+"
+
+    whiptail_yes_no_help \
+"⚠️ This script will install packages using sudo. Continue?" \
+"$HELP"
+
+    if [ $? -eq 0 ]; then
+        PKG_OK=true
+    else
+        PKG_OK=false
+    fi
+
+    PKG_DECIDED=true
+}
+
+################################################################################
+# STEP 2: TOOLCHAIN
+################################################################################
+
+step_toolchain() {
+    if ! $PKG_OK; then
+        whiptail --msgbox \
+"⚠️ Package installation not approved.
+
+You selected NO in Step 1.
+
+If you want to proceed:
+→ Run Step 1 again and select YES." 10 70
+        return
+    fi
+
+    TOOLCHAIN_OK=false
+
+    if command -v arm-linux-gnueabihf-gcc-11 &>/dev/null; then
+        version=$(arm-linux-gnueabihf-gcc-11 -dumpversion)
+        [[ "$version" == 11* ]] && TOOLCHAIN_OK=true
+    fi
+
+    if ! $TOOLCHAIN_OK; then
+        sudo apt update
+        sudo apt install -y gcc-11-arm-linux-gnueabihf
+    fi
+
+    if ! command -v arm-linux-gnueabihf-gcc &>/dev/null; then
+        sudo ln -sf /usr/bin/arm-linux-gnueabihf-gcc-11 \
+                    /usr/bin/arm-linux-gnueabihf-gcc
+    fi
+
+    version=$(arm-linux-gnueabihf-gcc -dumpversion)
+    [[ "$version" == 11* ]] && TOOLCHAIN_OK=true
+
+    $TOOLCHAIN_OK && \
+        whiptail --msgbox "[✔] ARM GCC toolchain ready (v$version)" 8 60
+}
+
+################################################################################
+# STEP 3: OTHER DEPENDENCIES
+################################################################################
+
+step_other_packages() {
+    if ! $PKG_OK; then
+        whiptail --msgbox \
+"⚠️ Package installation not approved.
+
+Please re-run Step 1 and select YES." 10 70
+        return
+    fi
+
+    MISSING_PKGS=()
+
+    for pkg in git wget curl make build-essential \
+               libssl-dev libncurses-dev device-tree-compiler u-boot-tools; do
+        dpkg -s "$pkg" &>/dev/null || MISSING_PKGS+=("$pkg")
+    done
+
+    [ ${#MISSING_PKGS[@]} -gt 0 ] && \
+        sudo apt install -y "${MISSING_PKGS[@]}"
+
+    whiptail --msgbox "[✔] Required packages installed." 8 50
+}
+
+################################################################################
+# STEP 4: KERNEL SOURCE
+################################################################################
+
+step_kernel_source() {
+    [ -d "$KERNEL_DIR" ] && {
+        whiptail --msgbox "Kernel source already exists." 8 60
+        return
+    }
+
+    git clone --depth=1 -b 5.10 \
+        https://github.com/beagleboard/linux.git "$KERNEL_DIR"
+
+    whiptail --msgbox "[✔] Kernel source cloned." 8 50
+}
+
+################################################################################
+# STEP 5: CREATE ENV.SH
+################################################################################
+
+step_env_file() {
+    cat > "$ENV_FILE" <<EOF
+export ARCH=arm
+export CROSS_COMPILE=arm-linux-gnueabihf-
+export KERNEL_SRC=$KERNEL_DIR
+EOF
+
+    whiptail --msgbox "[✔] env.sh created." 8 50
+}
+
+################################################################################
+# RUN ALL (RESPECTS DECISION)
+################################################################################
+
+run_all() {
+    step_confirm_packages
+    step_toolchain
+    step_other_packages
+    step_kernel_source
+    step_env_file
+}
+
+################################################################################
+# MAIN MENU
+################################################################################
+
+while true; do
+    CHOICE=$(whiptail --title "Environment Setup Menu" --menu \
+"Select an action:" 22 75 9 \
+"1" "Confirm package installation" \
+"2" "Check / install ARM toolchain" \
+"3" "Install other dependencies" \
+"4" "Download kernel source" \
+"5" "Create env.sh" \
+"6" "Run ALL steps" \
+"7" "Exit" \
+3>&1 1>&2 2>&3)
+
+    [ $? -ne 0 ] && continue
+
+    case "$CHOICE" in
+        1) PKG_DECIDED=false; step_confirm_packages ;;
+        2) step_toolchain ;;
+        3) step_other_packages ;;
+        4) step_kernel_source ;;
+        5) step_env_file ;;
+        6) run_all ;;
+        7) clear; exit 0 ;;
+    esac
+done

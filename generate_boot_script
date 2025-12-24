@@ -1,0 +1,185 @@
+#!/bin/bash
+
+OUTPUT_DIR="$HOME/linux_training/BOOT_FILES"
+BOOTCMD="boot.cmd"
+BOOTSCR="boot.scr"
+
+################################################################################
+# HELPER: YES / NO / HELP (SAFE)
+################################################################################
+
+whiptail_yes_no_help() {
+    local TITLE="$1"
+    local QUESTION="$2"
+    local HELP_TEXT="$3"
+
+    while true; do
+        CHOICE=$(whiptail --title "$TITLE" --menu \
+"$QUESTION" 15 80 3 \
+"Yes"  "Proceed" \
+"No"   "Skip this step" \
+"Help" "Explain this step" \
+3>&1 1>&2 2>&3)
+
+        STATUS=$?
+
+        # Cancel / ESC → go back
+        if [ $STATUS -ne 0 ]; then
+            return 2
+        fi
+
+        case "$CHOICE" in
+            Yes)  return 0 ;;
+            No)   return 1 ;;
+            Help) whiptail --title "Help" --msgbox "$HELP_TEXT" 20 90 ;;
+        esac
+    done
+}
+
+################################################################################
+# STEP 0: CONFIRMATION
+################################################################################
+
+HELP_MAIN="
+YES:
+- Generates boot.cmd for BeagleBone Black
+- Creates boot.scr using mkimage
+- Lets you choose Wireless / Non-Wireless board
+- Optionally copies boot.scr to SD card BOOT partition
+
+NO / CANCEL:
+- Script exits safely
+- No files are created
+
+REQUIREMENTS:
+- mkimage (u-boot-tools)
+- Optional BOOT mount at:
+  /media/\$(whoami)/BOOT
+"
+
+whiptail_yes_no_help \
+"Generate boot.scr" \
+"Do you want to generate boot.cmd and boot.scr?" \
+"$HELP_MAIN"
+
+RET=$?
+
+# Cancel or No → exit safely
+[ $RET -ne 0 ] && exit 0
+
+################################################################################
+# STEP 1: BOARD TYPE
+################################################################################
+
+if whiptail --title "Board Type" --yesno \
+"Is this a BeagleBone Black *Wireless* board?" 10 60; then
+    WIRELESS=true
+else
+    WIRELESS=false
+fi
+
+################################################################################
+# STEP 2: GENERATE boot.cmd
+################################################################################
+
+cat << 'EOF' > "$BOOTCMD"
+"*** Booting via boot.scr ***"
+
+setenv bootargs "console=ttyS0,115200 root=/dev/mmcblk0p2 rootfstype=ext4 rw rootwait"
+setenv bootfile "zImage"
+EOF
+
+if $WIRELESS; then
+    echo 'setenv fdtfile "am335x-boneblack-wireless.dtb"' >> "$BOOTCMD"
+else
+    echo 'setenv fdtfile "am335x-boneblack.dtb"' >> "$BOOTCMD"
+fi
+
+cat << 'EOF' >> "$BOOTCMD"
+
+load mmc 0:1 ${loadaddr} ${bootfile}
+load mmc 0:1 ${fdtaddr} ${fdtfile}
+
+"*** Booting Kernel ***"
+
+bootz ${loadaddr} - ${fdtaddr}
+EOF
+
+################################################################################
+# STEP 3: SHOW GENERATED FILE
+################################################################################
+
+whiptail --title "Generated boot.cmd" --textbox "$BOOTCMD" 25 90
+
+################################################################################
+# STEP 4: GENERATE boot.scr
+################################################################################
+
+if ! command -v mkimage &>/dev/null; then
+    whiptail --msgbox \
+"[✗] mkimage not found.
+
+Install it using:
+sudo apt install u-boot-tools
+" 10 70
+    exit 1
+fi
+
+mkimage -A arm -T script -O linux -d "$BOOTCMD" "$BOOTSCR"
+
+################################################################################
+# STEP 5: COPY boot.scr
+################################################################################
+
+HELP_COPY="
+YES:
+- Copy boot.scr to SD card BOOT partition
+- Path:
+  /media/\$(whoami)/BOOT
+
+NO:
+- Copy boot.scr to local output directory:
+  $OUTPUT_DIR
+"
+
+whiptail_yes_no_help \
+"Copy boot.scr" \
+"Copy boot.scr to SD card BOOT partition?" \
+"$HELP_COPY"
+
+RET=$?
+
+if [ $RET -eq 0 ]; then
+    BOOT_SD="/media/$(whoami)/BOOT"
+
+    if [ -d "$BOOT_SD" ]; then
+        sudo cp -v "$BOOTSCR" "$BOOT_SD"
+    else
+        whiptail --msgbox \
+"⚠️ BOOT partition not mounted.
+
+Copying to:
+$OUTPUT_DIR
+" 10 70
+        mkdir -p "$OUTPUT_DIR"
+        cp -v "$BOOTSCR" "$OUTPUT_DIR"
+    fi
+else
+    mkdir -p "$OUTPUT_DIR"
+    cp -v "$BOOTSCR" "$OUTPUT_DIR"
+fi
+
+################################################################################
+# DONE
+################################################################################
+
+whiptail --msgbox \
+"[✔] boot.scr generation completed successfully.
+
+Files created:
+- boot.cmd
+- boot.scr
+
+Output directory:
+$OUTPUT_DIR
+" 14 80

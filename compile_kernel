@@ -1,0 +1,373 @@
+#!/bin/bash
+
+################################################################################
+# CONFIGURATION
+################################################################################
+
+KERNEL_BASE_DIR="$HOME/linux_training/bbb-project/08_kernel"
+KERNEL_SRC_DIR="$KERNEL_BASE_DIR/kernel"
+CROSS_COMPILE="arm-linux-gnueabihf-"
+ARCH="arm"
+PRVCONFIG="my_bbb_custom_defconfig"
+DEFCONFIG="bb.org_defconfig"
+LOADADDR="0x80008000"
+ROOTFS="$HOME/linux_training/bbb-project/10_rootfs/rootfs/mnt"
+BOOT_DIR="$HOME/linux_training/BOOT_FILES"
+
+mkdir -p "$BOOT_DIR"
+
+################################################################################
+# HELPER: YES / NO / HELP (DO NOT CHANGE)
+################################################################################
+
+whiptail_yes_no_help() {
+    local QUESTION="$1"
+    local HELP_TEXT="$2"
+
+    while true; do
+        CHOICE=$(whiptail --title "Kernel Build" \
+            --menu "$QUESTION" 18 80 3 \
+            "Yes"  "Proceed" \
+            "No"   "Skip" \
+            "Help" "Detailed explanation" \
+            3>&1 1>&2 2>&3)
+
+        STATUS=$?
+
+        # Cancel / ESC → return to caller
+        [ $STATUS -ne 0 ] && return 2
+
+        case "$CHOICE" in
+            Yes)  return 0 ;;
+            No)   return 1 ;;
+            Help) whiptail --title "Help" --msgbox "$HELP_TEXT" 25 90 ;;
+        esac
+    done
+}
+
+################################################################################
+# DEPENDENCY CHECKS
+################################################################################
+
+require_config() {
+    if [ ! -f .config ]; then
+        whiptail --msgbox \
+"⚠️ Kernel configuration (.config) not found.
+
+Please run:
+→ Kernel configuration (Step 2)
+
+before continuing." 12 70
+        return 1
+    fi
+    return 0
+}
+
+require_kernel_built() {
+    if [ ! -f arch/arm/boot/zImage ] && [ ! -f arch/arm/boot/uImage ]; then
+        whiptail --msgbox \
+"⚠️ Kernel image not found.
+
+Please run:
+→ Build kernel image + DTBs (Step 5)
+
+before continuing." 12 70
+        return 1
+    fi
+    return 0
+}
+
+require_modules_built() {
+    if ! ls *.ko >/dev/null 2>&1 && ! find . -name "*.ko" | grep -q .; then
+        whiptail --msgbox \
+"⚠️ Kernel modules not found.
+
+Please run:
+→ Build kernel modules (Step 6)
+
+before installing modules." 12 70
+        return 1
+    fi
+    return 0
+}
+
+################################################################################
+# PRE-CHECK
+################################################################################
+
+if [ ! -d "$KERNEL_BASE_DIR" ] || [ ! -d "$KERNEL_SRC_DIR" ]; then
+    whiptail --msgbox \
+"[✗] Kernel source not found.
+
+Expected:
+$KERNEL_SRC_DIR
+
+To download the kernel source run env_setup :
+Run step number : 4 Download kernel source" 20 60
+    exit 1
+fi
+
+cd "$KERNEL_SRC_DIR" || exit 1
+
+################################################################################
+# STEP FUNCTIONS
+################################################################################
+
+step_clean() {
+    HELP="
+YES:
+- Fresh kernel build
+- Kernel version/config changed
+
+NO:
+- Fast rebuild
+- Already built recently
+"
+    whiptail_yes_no_help "Remove previous build files?" "$HELP"
+    [ $? -eq 0 ] && make ARCH=$ARCH distclean
+}
+
+step_config() {
+    HELP1="
+YES:
+- Load standard BeagleBone defconfig
+
+NO:
+- Load previous or custom defconfig
+"
+
+    HELP2="
+YES:
+- Load previously saved defconfig
+
+NO:
+- Enter a custom defconfig name
+"
+
+    whiptail_yes_no_help "Load default defconfig?" "$HELP1"
+    RET=$?
+
+    [ $RET -eq 2 ] && return
+
+    if [ $RET -eq 0 ]; then
+        make ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE "$DEFCONFIG"
+    else
+        whiptail_yes_no_help "Load previous defconfig?" "$HELP2"
+        RET2=$?
+
+        [ $RET2 -eq 2 ] && return
+
+        if [ $RET2 -eq 0 ]; then
+            make ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE "$PRVCONFIG"
+        else
+            CUSTOM=$(whiptail --inputbox \
+"Enter custom defconfig name:" 10 60 \
+3>&1 1>&2 2>&3)
+
+            [ -n "$CUSTOM" ] && \
+            make ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE "$CUSTOM"
+        fi
+    fi
+}
+
+step_menuconfig() {
+    require_config || return
+
+    HELP="
+YES:
+- Modify kernel configuration
+
+NO:
+- Keep current configuration
+"
+    whiptail_yes_no_help "Run menuconfig?" "$HELP"
+    [ $? -eq 0 ] && {
+        make ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE menuconfig
+        make ARCH=$ARCH savedefconfig
+        mv defconfig arch/arm/configs/my_bbb_custom_defconfig
+        PRVCONFIG="my_bbb_custom_defconfig"
+    }
+}
+
+step_dtbs() {
+    require_config || return
+
+    HELP="
+YES:
+- Device Tree changes only
+
+NO:
+- Full build later
+"
+    whiptail_yes_no_help "Build only DTBs?" "$HELP"
+    [ $? -eq 0 ] && make ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE dtbs -j$(nproc)
+}
+
+step_kernel() {
+    require_config || return
+
+    HELP="
+YES:
+- Build bootable kernel image
+
+NO:
+- Skip kernel image
+"
+    whiptail_yes_no_help "Compile kernel image + DTBs?" "$HELP"
+    [ $? -eq 0 ] && \
+    make ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE \
+        uImage dtbs LOADADDR=$LOADADDR -j$(nproc)
+}
+
+step_modules() {
+    require_config || return
+
+    HELP="
+YES:
+- Drivers built as modules
+
+NO:
+- Everything built-in
+"
+    whiptail_yes_no_help "Build kernel modules?" "$HELP"
+    [ $? -eq 0 ] && make ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE modules -j$(nproc)
+}
+
+step_install_modules() {
+    require_modules_built || return
+
+    HELP="
+YES:
+- Rootfs is mounted
+- Install runtime modules
+
+NO:
+- Skip module install
+"
+    whiptail_yes_no_help "Install modules to rootfs?" "$HELP"
+    RET=$?
+
+    [ $RET -ne 0 ] && return
+
+    INPUT=$(whiptail --inputbox \
+"Enter rootfs path:" 10 70 "$ROOTFS" \
+3>&1 1>&2 2>&3)
+
+    [ -n "$INPUT" ] && ROOTFS="$INPUT"
+
+    sudo make ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE \
+        INSTALL_MOD_PATH="$ROOTFS" modules_install
+}
+
+step_install_kernel() {
+    require_kernel_built || return
+
+    HELP="
+YES:
+- Rootfs mounted
+- Install kernel to /boot
+
+NO:
+- Skip kernel install
+"
+    whiptail_yes_no_help "Install kernel to rootfs /boot?" "$HELP"
+    RET=$?
+
+    [ $RET -ne 0 ] && return
+
+    INPUT=$(whiptail --inputbox \
+"Enter rootfs path:" 10 70 "$ROOTFS" \
+3>&1 1>&2 2>&3)
+
+    [ -n "$INPUT" ] && ROOTFS="$INPUT"
+
+    sudo make ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE \
+        INSTALL_PATH="$ROOTFS/boot" install
+}
+
+step_copy_boot_files() {
+    require_kernel_built || return
+
+    HELP="
+YES:
+- Copy zImage + DTBs to SD card BOOT
+
+NO:
+- Copy to local BOOT_FILES
+"
+    whiptail_yes_no_help "Copy boot files?" "$HELP"
+    RET=$?
+
+    BOOT_SD="/media/$(whoami)/BOOT"
+
+    if [ $RET -eq 0 ] && [ -d "$BOOT_SD" ]; then
+        sudo cp arch/arm/boot/zImage "$BOOT_SD"
+
+        whiptail_yes_no_help "Wireless board DTB?" "
+YES:
+- Wireless DTB
+
+NO:
+- Non-wireless DTB
+"
+        [ $? -eq 0 ] && \
+            sudo cp arch/arm/boot/dts/am335x-boneblack-wireless.dtb "$BOOT_SD" || \
+            sudo cp arch/arm/boot/dts/am335x-boneblack.dtb "$BOOT_SD"
+    else
+        sudo cp arch/arm/boot/{zImage,uImage} "$BOOT_DIR"
+        sudo cp arch/arm/boot/dts/*.dtb "$BOOT_DIR"
+    fi
+}
+
+################################################################################
+# RUN ALL (SAFE ORDER)
+################################################################################
+
+run_all() {
+    step_clean
+    step_config
+    step_menuconfig
+    step_dtbs
+    step_kernel
+    step_modules
+    step_install_modules
+    step_install_kernel
+    step_copy_boot_files
+}
+
+################################################################################
+# MAIN MENU
+################################################################################
+
+while true; do
+    CHOICE=$(whiptail --title "Kernel Build Menu" --menu \
+"Select an action:" 22 75 11 \
+"1" "Clean previous build" \
+"2" "Kernel configuration" \
+"3" "Run menuconfig" \
+"4" "Build DTBs only" \
+"5" "Build kernel image + DTBs" \
+"6" "Build kernel modules" \
+"7" "Install kernel modules" \
+"8" "Install kernel to rootfs /boot" \
+"9" "Copy boot files" \
+"A" "Run ALL steps sequentially" \
+"X" "Exit" \
+3>&1 1>&2 2>&3)
+
+    [ $? -ne 0 ] && continue
+
+    case "$CHOICE" in
+        1) step_clean ;;
+        2) step_config ;;
+        3) step_menuconfig ;;
+        4) step_dtbs ;;
+        5) step_kernel ;;
+        6) step_modules ;;
+        7) step_install_modules ;;
+        8) step_install_kernel ;;
+        9) step_copy_boot_files ;;
+        A) run_all ;;
+        X) clear; exit 0 ;;
+    esac
+done
